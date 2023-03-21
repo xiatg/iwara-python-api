@@ -90,6 +90,9 @@ class ApiClient:
 
             r = requests.get(url, params=params, auth=BearerAuth(self.token), timeout=self.timeout)
 
+        #Debug
+        print("[DEBUG] get_videos response:", r)
+
         return r
     
     def get_video(self, video_id) -> requests.Response:
@@ -101,15 +104,16 @@ class ApiClient:
             r = requests.get(url, timeout=self.timeout)
         else:
             r = requests.get(url, auth=BearerAuth(self.token), timeout=self.timeout)
+
+        #Debug
+        print("[DEBUG] get_video response:", r)
+
         return r
     
     def download_video_thumbnail(self, video_id) -> str:
         """# Download video thumbnail from iwara.tv
         """
         video = self.get_video(video_id).json()
-
-        #Debug
-        print(video)
 
         file_id = video['file']['id']
         thumbnail_id = video['thumbnail']
@@ -150,7 +154,10 @@ class ApiClient:
         # print(downloadLink)
 
         # API
-        video = self.get_video(video_id).json()
+        try:
+            video = self.get_video(video_id).json()
+        except Exception as e:
+            raise Exception(f"Failed to get video info for video ID: {video_id}, error: {e}")
 
         #Debug
         print(video)
@@ -172,19 +179,35 @@ class ApiClient:
         #Debug
         print(resources)
 
+        resources_by_quality = [None for i in range(10)]
+
         for resource in resources:
             if resource['name'] == 'Source':
+                resources_by_quality[0] = resource
+            # elif resource['name'] == '1080':
+            #     resources_by_quality[1] = resource
+            # elif resource['name'] == '720':
+            #     resources_by_quality[2] = resource
+            # elif resource['name'] == '480':
+            #     resources_by_quality[3] = resource
+            # elif resource['name'] == '540':
+                # resources_by_quality[4] = resource
+            # elif resource['name'] == '360':
+                # resources_by_quality[5] = resource
 
+        for resource in resources_by_quality:
+            if resource is not None:
                 #Debug
                 print(resource)
 
                 download_link = "https:" + resource['src']['download']
                 file_type = resource['type'].split('/')[1]
+
                 video_file_name = video_id + '.' + file_type
 
                 if (os.path.exists(video_file_name)):
                     print(f"Video ID {video_id} Already downloaded, skipped downloading. ")
-                    break
+                    return video_file_name
 
                 print(f"Downloading video ID: {video_id} ...")
                 with open(video_file_name, "wb") as f:
@@ -192,6 +215,7 @@ class ApiClient:
                         if chunk:
                             f.write(chunk)
                             f.flush()
-                break
 
-        return video_file_name
+                return video_file_name
+            
+        raise Exception("No video with Source quality found")
