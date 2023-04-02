@@ -210,12 +210,16 @@ class ApiClient:
                     return video_file_name
 
                 print(f"Downloading video ID: {video_id} ...")
-                with open(video_file_name, "wb") as f:
-                    for chunk in requests.get(download_link).iter_content(chunk_size=1024):
-                        if chunk:
-                            f.write(chunk)
-                            f.flush()
+                try:
+                    with open(video_file_name, "wb") as f:
+                        for chunk in requests.get(download_link).iter_content(chunk_size=1024):
+                            if chunk:
+                                f.write(chunk)
+                                f.flush()
+                    return video_file_name
+                except Exception as e:
+                    os.remove(video_file_name)
+                    raise Exception(f"Failed to download video ID: {video_id}, error: {e}")
 
-                return video_file_name
             
         raise Exception("No video with Source quality found")
