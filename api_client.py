@@ -1,9 +1,4 @@
-import requests, hashlib, os
-
-# import cloudscraper
-# from requests_html import HTMLSession
-# from bs4 import BeautifulSoup
-# html_url = 'https://iwara.tv'
+import cloudscraper, requests, hashlib, os
 
 api_url = 'https://api.iwara.tv'
 file_url = 'https://files.iwara.tv'
@@ -19,51 +14,29 @@ class BearerAuth(requests.auth.AuthBase):
 
 class ApiClient:
     def __init__(self, email, password):
+        self.scraper = cloudscraper.create_scraper()
         self.email = email
         self.password = password
-
-        # self.headers = {
-        # 'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36',
-        # 'X-Version': 's'
-        # }
-
-        # API
         self.api_url = api_url
         self.file_url = file_url
-        self.timeout = 30
-        # self.max_retries = 5
-        self.download_timeout = 300
         self.token = None
-
-        # HTML
-        # self.html_url = html_url
-
-        # Cloudscraper
-        # self.scraper = cloudscraper.create_scraper(browser={'browser': 'firefox','platform': 'windows','mobile': False}, 
-        #                                         #    interpreter = 'nodejs'
-        #                                         )
-        # Requests-html
-        # self.session = HTMLSession()
 
     def login(self) -> requests.Response:
         url = self.api_url + '/user/login'
         json = {'email': self.email, 'password': self.password}
-        r = requests.post(url, json=json, timeout=self.timeout)
+        r = self.scraper.post(
+            url, 
+            json=json,
+            )
+        
+        #Debug
+        print("[DEBUG] login response:", r)
+
         try:
-            self.token = r.json()['token']
+            self.token = r.json().get('token')
             print('API Login success')
         except:
             print('API Login failed')
-
-        # try:
-        #     # Cloudscraper
-        #     # r = self.scraper.post(url, json=json, headers=self.headers, timeout=self.timeout)
-
-        #     # Requests-html
-        #     r = self.session.post(url, json=json, headers=self.headers, timeout=self.timeout)
-        # except:
-        #     print('BS4 Login failed')
-
         return r
 
     # limit query is not working
@@ -80,15 +53,9 @@ class ApiClient:
                   'subscribed': 'true' if subscribed else 'false',
                   }
         if self.token is None:
-            r = requests.get(url, params=params, timeout=self.timeout)
+            r = self.scraper.get(url, params=params)
         else:
-
-            # Verbose Debug
-            # request = requests.Request('GET', url, params=params, auth=BearerAuth(self.token))
-            # print(request.prepare().method, request.prepare().url, request.prepare().headers, request.prepare().body, sep='\n')
-            # r = requests.Session().send(request.prepare())
-
-            r = requests.get(url, params=params, auth=BearerAuth(self.token), timeout=self.timeout)
+            r = self.scraper.get(url, params=params, auth=BearerAuth(self.token))
 
         #Debug
         print("[DEBUG] get_videos response:", r)
@@ -101,9 +68,9 @@ class ApiClient:
         url = self.api_url + '/video/' + video_id
 
         if self.token is None:
-            r = requests.get(url, timeout=self.timeout)
+            r = self.scraper.get(url)
         else:
-            r = requests.get(url, auth=BearerAuth(self.token), timeout=self.timeout)
+            r = self.scraper.get(url, auth=BearerAuth(self.token))
 
         #Debug
         print("[DEBUG] get_video response:", r)
@@ -128,7 +95,7 @@ class ApiClient:
         
         print(f"Downloading thumbnail for video ID: {video_id} ...")
         with open(thumbnail_file_name, "wb") as f:
-            for chunk in requests.get(url).iter_content(chunk_size=1024):
+            for chunk in self.scraper.get(url).iter_content(chunk_size=1024):
                 if chunk:
                     f.write(chunk)
                     f.flush()
@@ -138,29 +105,10 @@ class ApiClient:
     def download_video(self, video_id) -> str:
         """# Download video from iwara.tv
         """
-
-        # html
-        # url = self.html_url + '/video/' + video_id
-
-        # Cloudscraer
-        # html = self.scraper.get(url, auth=BearerAuth(self.token), timeout=self.timeout).text
-
-        # Requests-html
-        # html = self.session.get(url, auth=BearerAuth(self.token), timeout=self.timeout).text
-
-        # print(html)
-        # html = BeautifulSoup(, 'html.parser')
-        # downloadLink = html.find('div', class_='dropdown_content')
-        # print(downloadLink)
-
-        # API
         try:
             video = self.get_video(video_id).json()
         except Exception as e:
             raise Exception(f"Failed to get video info for video ID: {video_id}, error: {e}")
-
-        #Debug
-        print(video)
 
         url = video['fileUrl']
         file_id = video['file']['id']
@@ -174,32 +122,16 @@ class ApiClient:
 
         headers = {"X-Version": hash}
 
-        resources = requests.get(url, headers=headers, auth=BearerAuth(self.token), timeout=self.timeout).json()
-        
-        #Debug
-        print(resources)
+        resources = self.scraper.get(url, headers=headers, auth=BearerAuth(self.token)).json()
 
         resources_by_quality = [None for i in range(10)]
 
         for resource in resources:
             if resource['name'] == 'Source':
                 resources_by_quality[0] = resource
-            # elif resource['name'] == '1080':
-            #     resources_by_quality[1] = resource
-            # elif resource['name'] == '720':
-            #     resources_by_quality[2] = resource
-            # elif resource['name'] == '480':
-            #     resources_by_quality[3] = resource
-            # elif resource['name'] == '540':
-                # resources_by_quality[4] = resource
-            # elif resource['name'] == '360':
-                # resources_by_quality[5] = resource
 
         for resource in resources_by_quality:
             if resource is not None:
-                #Debug
-                print(resource)
-
                 download_link = "https:" + resource['src']['download']
                 file_type = resource['type'].split('/')[1]
 
@@ -212,7 +144,7 @@ class ApiClient:
                 print(f"Downloading video ID: {video_id} ...")
                 try:
                     with open(video_file_name, "wb") as f:
-                        for chunk in requests.get(download_link).iter_content(chunk_size=1024):
+                        for chunk in self.scraper.get(download_link).iter_content(chunk_size=1024):
                             if chunk:
                                 f.write(chunk)
                                 f.flush()
